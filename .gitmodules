@@ -1,0 +1,6 @@
+[submodule "libbpf"]
+	path = libbpf
+	url = https://github.com/khulnasoft/libbpf
+[submodule "kernel-collector"]
+	path = kernel-collector
+	url = https://github.com/khulnasoft/kernel-collector.git

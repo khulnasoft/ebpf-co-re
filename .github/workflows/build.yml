@@ -1,0 +1,37 @@
+---
+name: CI
+on:
+  pull_request: null
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-artifacts:
+    name: Build Artifacts
+    strategy:
+      fail-fast: false
+      matrix:
+        kernel_version:
+          - '6.6.17'
+        libc:
+          - glibc
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Run build.sh
+        run: |
+          os=core
+          ./build.sh ${{ matrix.kernel_version }} ${{ matrix.libc }} "${os}"
+      - name: List Artifacts
+        run: |
+          ls -lah artifacts
+          test -f artifacts/khulnasoft_ebpf-*.tar.xz
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: artifacts-${{ matrix.kernel_version }}-${{ matrix.libc }}
+          path: artifacts

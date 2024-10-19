@@ -1,0 +1,70 @@
+---
+# Builds and Releases packages for eBPF to be consumed by Khulnasoft Agent
+name: CD
+on:
+  push:
+    tags:
+      - 'v*'
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-artifacts:
+    name: Build Artifacts
+    strategy:
+      matrix:
+        kernel_version:
+          - '6.6.17'
+        libc:
+          - glibc
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Run build.sh
+        run: |
+          os=core
+          ./build.sh ${{ matrix.kernel_version }} ${{ matrix.libc }} "${os}"
+      - name: List Artifacts
+        run: |
+          ls -lah artifacts
+          test -f artifacts/khulnasoft_ebpf-co-re-*.tar.xz
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: artifacts
+          path: artifacts
+
+  create-release:
+    name: Create Release
+    needs: build-artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: artifacts
+          path: artifacts
+      - name: Set release_tag
+        run: |
+          echo "RELEASE_TAG=${GITHUB_REF##*/}" >> $GITHUB_ENV
+      - name: Consolidate Artifacts
+        run: |
+          mkdir -p final-artifacts
+          for libc in glibc; do
+            mkdir -p "packages/khulnasoft-ebpf-co-re-${libc}-${RELEASE_TAG}"
+            tar -C packages/khulnasoft-ebpf-co-re-"$libc"-${RELEASE_TAG} -xvf artifacts/*.tar.xz
+            tar -C packages/khulnasoft-ebpf-co-re-"$libc"-${RELEASE_TAG} -Jcvf final-artifacts/khulnasoft-ebpf-co-re-"$libc"-${RELEASE_TAG}.tar.xz ./
+          done
+          cd final-artifacts && sha256sum *.tar.xz > sha256sums.txt
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: false
+          artifactErrorsFailBuild: true
+          artifacts: 'final-artifacts/*'
+          draft: true
+          token: ${{ secrets.ORG_REPO_TOKEN }}
